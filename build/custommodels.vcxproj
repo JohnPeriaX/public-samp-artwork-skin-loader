@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{B7A3F1C2-1D4E-4A5B-9C6D-7E8F90A1B2C3}</ProjectGuid>
+    <RootNamespace>custommodels</RootNamespace>
+    <!-- Change if your MSVC install ships a different toolset (v142 = VS2019, v141 = VS2017). -->
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries>
+    <WholeProgramOptimization Condition="'$(Configuration)'=='Release'">true</WholeProgramOptimization>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <PropertyGroup>
+    <TargetName>custommodels</TargetName>
+    <!-- Emit the ASI deliverable directly; no sibling custommodels.dll artifact. -->
+    <TargetExt>.asi</TargetExt>
+    <OutDir>$(ProjectDir)bin\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)obj\$(Configuration)\</IntDir>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\src;$(ProjectDir)..\vendor;$(ProjectDir)..\vendor\urmem;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;WIN32_LEAN_AND_MEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Static CRT so the .asi has no runtime DLL dependency inside the game. -->
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <Optimization Condition="'$(Configuration)'=='Release'">MaxSpeed</Optimization>
+      <Optimization Condition="'$(Configuration)'=='Debug'">Disabled</Optimization>
+      <WarningLevel>Level3</WarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>wininet.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <PostBuildEvent>
+      <Command>echo custommodels.asi is the direct linker output; deploy only after the validated Release build.</Command>
+      <Message>ASI output is custommodels.asi; game deployment is a separate validated step</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClCompile Include="..\src\dllmain.cpp" />
+    <ClCompile Include="..\src\core\log.cpp" />
+    <ClCompile Include="..\src\core\samp.cpp" />
+    <ClCompile Include="..\src\net\raknet.cpp" />
+    <ClCompile Include="..\src\net\artwork.cpp" />
+    <ClCompile Include="..\src\net\masquerade.cpp" />
+    <ClCompile Include="..\src\net\dlcompat.cpp" />
+    <ClCompile Include="..\src\net\nativeart.cpp" />
+    <ClCompile Include="..\src\net\directdl.cpp" />
+    <ClCompile Include="..\src\model\crc32.cpp" />
+    <ClCompile Include="..\src\model\cache.cpp" />
+    <ClCompile Include="..\src\model\download.cpp" />
+    <ClCompile Include="..\src\game\rwmodel.cpp" />
+    <ClCompile Include="..\src\game\render.cpp" />
+    <ClCompile Include="..\vendor\raknet\bitstream.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\core\log.h" />
+    <ClInclude Include="..\src\core\samp.h" />
+    <ClInclude Include="..\src\net\raknet.h" />
+    <ClInclude Include="..\src\net\artwork.h" />
+    <ClInclude Include="..\src\net\masquerade.h" />
+    <ClInclude Include="..\src\net\nativeart.h" />
+    <ClInclude Include="..\src\net\directdl.h" />
+    <ClInclude Include="..\vendor\urmem\urmem.hpp" />
+    <ClInclude Include="..\vendor\raknet\rakclient.h" />
+    <ClInclude Include="..\vendor\raknet\bitstream.h" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

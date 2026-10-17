@@ -1,0 +1,88 @@
+# MSVC / Visual Studio build output (keep the project file itself)
+/build/*
+!/build/custommodels.vcxproj
+.vs/
+*.user
+*.suo
+Debug/
+Release/
+x64/
+Win32/
+*.obj
+*.o
+*.pch
+*.ipch
+*.ilk
+*.exp
+*.lib
+*.pdb
+*.idb
+*.asi
+*.dll
+*.log
+*.dmp
+*.mdmp
+*.stackdump
+
+# CMake output
+/out/
+/cmake-build-*/
+/CMakeCache.txt
+/CMakeFiles/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local-only investigation notes and generated MCP export
+/.bug-hunter/
+/ida-mcp-logs-*.zip
+
+# Local-only test server assets, third-party loader archives and game executable
+/test/sampl-dl-server/
+/test/asi-loader/*.zip
+/test/asi-loader/*.SHA512
+/test/*.amx
+/test/bans.json
+/test/sampcmd-src/
+/vendor/samp/gta_sa.exe
+
+# Test runtime output and generated server files
+/test/log.txt
+/test/*.db
+/test/pawn.lock
+/test/sampctl_build_file.inc
+/test/omp-server
+/test/omp-server.exe
+/test/components/
+/test/dependencies/
+/test/plugins/
+/test/npcmodes/
+/test/qawno/
+/test/scriptfiles/
+/test/gamemodes/*.amx
+/test/filterscripts/*.amx
+
+# Local model payloads are not repository source. Keep the source manifest
+# (test/models/artconfig.txt) and scripts, but not downloaded/generated model files.
+/test/models/*.dff
+/test/models/*.txd
+
+# IDA Pro databases and analysis caches
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+*.i64
+*.idb
+
+# Private project instructions and local analysis documents
+/AGENTS.md
+/docs/
