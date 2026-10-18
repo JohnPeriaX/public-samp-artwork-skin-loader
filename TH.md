@@ -16,6 +16,12 @@ R3-1 ใช้ทางที่โปรเจกต์นี้ทำขึ้
 
 จากนั้น `src/game/render.cpp` จะนำ RenderWare clump ของ custom skin ไปแทนที่ clump ของ base skin ที่กำลังถูกใช้งานอยู่ ทำให้ตัวละครที่เกมสร้างตามระบบปกติยังใช้ base model เดิม แต่ภาพที่เห็นเป็น custom model
 
+### R3-1: งาน custom object ที่กำลังทำ
+
+ตอนนี้ล็อกงานไว้ที่ R3-1 และกำลังต่อยอดจาก custom skin ไปยัง 0.3.DL **simple object** ด้วย `AddSimpleModel` ซึ่งใช้ custom object ID ช่วง `-1000` ถึง `-30000` และนำ ID ไปใช้กับ `CreateObject` หรือ `CreatePlayerObject`
+
+ฝั่ง R3 ตอนนี้ตรวจ IDA แล้วพบว่า client มี 0.3.DL model manager และ native object pipeline อยู่แล้ว โดย simple object ใช้ custom ID ช่วง `-1000` ถึง `-30000` และถูกส่งต่อผ่าน `CObjectPool::Create` ได้โดยตรง งาน source จึงเปลี่ยนมาเปิดใช้ native pipeline นี้และวางไฟล์ DFF/TXD ลง native cache แทนการเอา negative ID ไป index `CModelInfo` ของ GTA งานส่วนนี้ **ยังไม่ถือเป็น runtime PASS** จนกว่าจะทดสอบ `AddSimpleModel` + `CreateObject` จริง
+
 ### R5-1
 
 R5-1 มีของดีอยู่ใน `samp.dll` มากกว่าที่เห็นจากภายนอก ตัว client มี native 0.3DL artwork manager และทาง render object อยู่แล้ว ส่วนที่ขาดคือ download worker ที่ทำงานจริง
@@ -149,6 +155,8 @@ server artwork ต้องการ user agent แบบนี้ จึงไ�
 
 เมื่อ custom skin ไม่ได้ใช้งานแล้ว จะ restore clump เดิมกลับมา
 
+สำหรับงาน R3 รอบปัจจุบัน object ใช้ native 0.3.DL pipeline ของ R3 แล้ว โดย plugin รับ RPC 179/183/185 เข้าสู่ native model manager, ดาวน์โหลด DFF/TXD ลง native cache และอ่าน entry `type=2` เพื่อ mirror metadata ส่วน `CModelInfo::AddClumpModel` ไม่ถูกใช้กับ negative SA-MP object ID งานนี้ **ยังอยู่ระหว่างทำ** จนกว่าจะผ่าน live test ด้วย `AddSimpleModel` + `CreateObject` จริง
+
 ยังมีการตรวจกรณี streamer ของเกม unload clump ออกไปแล้วด้วย เพราะ pointer เก่าที่เคยเก็บไว้ไม่ควรถูกนำกลับไปเขียนทับ model ที่เพิ่งโหลดใหม่
 
 R3-1 ยังมี hook ใน spawn path เพื่อเปลี่ยน custom model ID กลับเป็น base model ID ก่อนที่ SA-MP จะสร้าง ped
@@ -160,6 +168,94 @@ R3-1 ยังมี hook ใน spawn path เพื่อเปลี่ยน
 ### `vendor`
 
 เก็บ dependency ขนาดเล็กที่ใช้ในงานนี้ เช่น RakNet interface และ urmem สำหรับ hook
+
+## การทดสอบที่มีหลักฐานจริง
+
+## ผลการ build ล่าสุดของ PC
+
+source tree ปัจจุบันถูก build ใหม่ด้วย Visual Studio 2022 Community MSBuild สำเร็จแล้ว:
+
+- Configuration: `Release | Win32`
+- MSBuild: `17.14.60`
+- MSVC: `14.44.35207`
+- ผลลัพธ์: **0 warnings, 0 errors**
+- ไฟล์ output: `build/bin/Release/custommodels.asi`
+- SHA-256: `A65E526E58DED5432D9B4CFCDF37C559CF457A925329C6E4C2C59108885041D0`
+
+ผลนี้ยืนยันเฉพาะ **source/build path** เท่านั้น ยังไม่เลื่อนสถานะ R3 custom-object เป็น runtime PASS และไม่ได้ประกาศ R5 runtime PASS
+
+## R3-1 Secure Asset Storage
+
+รอบนี้เพิ่ม protected asset path สำหรับ R3-1 โดยเป้าหมายคือไม่ทิ้ง DFF/TXD แบบ plaintext ไว้ใน cache ถาวรบนเครื่องลูกค้า
+
+- downloader รับไฟล์เข้า RAM แทนการเขียน DFF/TXD ลง disk โดยตรง
+- ตรวจ CRC32 ก่อนเก็บ asset
+- asset ที่เก็บถาวรถูกเข้ารหัสด้วย AES-256-GCM พร้อม nonce ใหม่ต่อ asset และ authentication tag
+- key AES ถูกสร้างด้วย `BCryptGenRandom` และเก็บเป็น DPAPI-protected blob แบบผูกกับ user profile ของ Windows
+- ก่อนให้ `samp.dll`/RenderWare ใช้งาน จะ decrypt ลง native cache เป็น staging file ชั่วคราว
+- หลัง RenderWare โหลด clump/TXD ครบแล้ว plugin ลบ staging plaintext ออกจาก disk
+- หาก streamer ต้องโหลด clump ใหม่ plugin สามารถ materialize จาก protected cache กลับมาได้
+- ถ้า protected asset ถูกแก้ไขหรือ decrypt ไม่ผ่าน จะไม่ถือว่าเป็น asset ที่ใช้งานได้
+
+ข้อจำกัดที่ต้องระบุให้ชัด: R3 ตอนนี้ยังรับ asset ผ่าน HTTP ตาม flow เดิมของ open.mp ดังนั้น encryption รอบนี้ป้องกัน **persistent client cache / การ copy cache ไปใช้ต่อ** เป็นหลัก ยังไม่ใช่ end-to-end encrypted transport. การทำ server-side encrypted asset + session key/TLS จะเป็นขั้นถัดไปก่อนนำระบบนี้ไปใช้กับ asset เชิงพาณิชย์จริง
+
+หลักการ AES-GCM/nonce uniqueness, CNG และการไม่ hardcode key สอดคล้องกับแนวทางของ Microsoft สำหรับ authenticated encryption และ key protection. DPAPI โดยค่าเริ่มต้นผูกข้อมูลกับ user credential และเครื่องที่ใช้ปกป้องข้อมูล
+
+### Build evidence รอบ Secure R3
+
+- Configuration: `Release | Win32`
+- MSBuild: `17.14.60`
+- MSVC: `14.44.35207`
+- Result: **0 warnings, 0 errors**
+- Output: `build/bin/Release/custommodels.asi`
+- SHA-256: `A65E526E58DED5432D9B4CFCDF37C559CF457A925329C6E4C2C59108885041D0`
+- `git diff --check`: exit 0; มีเฉพาะคำเตือนเรื่อง LF/CRLF
+- Runtime after GUI-fix build: **PASS**
+- Runtime evidence: เปิด GTA ใหม่แล้ว R3-1 โหลด artwork ผ่านตามปกติ และ GUI เดินจาก `Updating models.. [0/6]` ต่อจนโหลดครบ
+- Deployment: `C:\Games\Grand Theft Auto San Andreas\custommodels.asi` ถูกแทนด้วย build นี้แล้ว และ SHA-256 ตรงกัน
+
+## R3-1 Asset Download GUI: root cause และ fix รอบ 2026-10-18
+
+ภาพ `sa-mp-002.png` แสดง native dialog ของ R3-1 ชัดเจนว่า UI ไม่ได้หาย แต่ค้างที่ `Updating models.. [0/6]` ขณะที่ protected downloader ดาวน์โหลดครบทั้ง 6 asset และสร้าง protected cache สำเร็จ
+
+### Root cause ที่ยืนยันจาก IDA
+
+R3-1 native client มี callback สำหรับ progress/completion ของ download UI อยู่จริง:
+
+- GUI singleton pointer: `samp.dll + 0x26E8A0`
+- native GUI updater: `samp.dll + 0x06A570` (`sub_1006A570`)
+- start/reset dialog: `samp.dll + 0x06A100` (`sub_1006A100`)
+- completion path ของ native file worker เรียก updater ด้วย `state=4` เมื่อไฟล์หนึ่งเสร็จ
+- native worker ยังตั้ง readiness byte ของ artwork entry (`+0` DFF / `+1` TXD) ก่อน artwork manager ไปต่อ
+
+ก่อนหน้านี้ plugin downloader ทำ HTTP/CRC/secure-cache เอง แต่ไม่ได้ส่ง completion callback ตัวนี้กลับเข้า native R3 จึงเกิดอาการ UI รู้ว่ามี 6 ไฟล์ แต่ไม่มี event ว่าไฟล์ใดเสร็จ ทำให้ค้าง `0/6` และ native `.temp` ที่ตัวเองสร้างไว้ยังคงอยู่
+
+จุดนี้ **ไม่ใช่ bug ที่เพิ่งเกิดจาก securecache** ผู้ใช้ยืนยันว่า GUI มีปัญหามาตั้งแต่ก่อน securecache และ IDA ยืนยันว่า architecture เดิมของ downloader ก็ bypass native GUI completion path อยู่แล้ว
+
+### สิ่งที่แก้ใน R3
+
+- `model/download.cpp` เพิ่ม completion hook ที่ทำงานบน downloader worker thread ซึ่งเป็นบริบทเดียวกับ native download callback ที่ IDA พบ
+- `directdl.cpp` รับ completion แล้ว:
+  1. materialize plaintext ชั่วคราวเข้า native cache
+  2. ตั้ง DFF/TXD ready flag ของ native R3 artwork entry
+  3. เรียก `sub_1006A570` ด้วย `state=4` และจำนวน byte จริง เพื่ออัปเดต native GUI
+  4. บันทึกไฟล์เป็น completed
+  5. เมื่อครบ 6 ไฟล์ ส่ง `FinishDownload` RPC 184
+- cache hit และ inline payload ใช้ completion path เดียวกัน
+- `Pump()` เหลือเป็น fallback เพราะ native R3 download dialog สามารถ block heartbeat ของ `CNetGame::Process` ระหว่างรอ download
+- R5 ไม่ถูกแตะใน logic นี้ และยังคงล็อกไว้
+
+### Build / deploy evidence ของ GUI-fix รอบนี้
+
+- `Release | Win32`
+- MSBuild `17.14.60`
+- MSVC `14.44.35207`
+- **0 warnings, 0 errors**
+- build SHA-256: `A65E526E58DED5432D9B4CFCDF37C559CF457A925329C6E4C2C59108885041D0`
+- deployed SHA-256 ที่ `C:\Games\Grand Theft Auto San Andreas\custommodels.asi`: ตรงกัน 100%
+- Runtime verification หลัง build นี้: **PASS**
+- เปิด GTA ใหม่แล้ว R3-1 โหลด artwork ผ่านตามปกติ; GUI ไม่ค้างที่ `0/6` และ flow download เดินต่อจนจบ
+- ผู้ใช้ยืนยันผล runtime ว่าโหลดผ่านปกติหลัง GUI-fix
 
 ## การทดสอบที่มีหลักฐานจริง
 

@@ -1,175 +1,317 @@
-// customskin-037 local R3-1 skin test gamemode (open.mp)
-//
-// Use REAL ped/skin artwork already installed under test/models:
-//   skin A: id 20001, base 1  <- models/people001.dff + models/people001.txd
-//   skin B: id 20002, base 2  <- models/people002.dff + models/people002.txd
-// The test is intentionally SKIN ONLY. No custom objects are registered or spawned.
-// Their model files are served by the local open.mp artwork webserver, so the R3-1 client
-// receives RPC 179, requests RPC 181/182, downloads RPC 183 files, verifies CRC, and
-// loads the real ped clump/TXD before SetPlayerSkin applies the custom model.
-//
-// The harness keeps the normal class-selection screen active so << / >> can choose
-// normal, custom 20001, or custom 20002. After spawn, /skin1 and /skin2 can re-apply either model.
-//
-// Both registered models use their real paired DFF/TXD files already present under models/.
-// The two /skin commands exercise separate base model IDs and separate artwork cache entries.
-//
-// compile to gamemodes/test.amx (see test/readme.md) with a recent omp-stdlib
-
 #include <open.mp>
 
-#define SKIN_A_ID   20001
-#define SKIN_A_BASE 1
-#define SKIN_B_ID   20002
-#define SKIN_B_BASE 2
+#define MODEL_SKIN_1 20001
+#define MODEL_SKIN_2 20002
+#define MODEL_OBJECT -2000
 
-// normal spawn skin (cj). deliberately NOT a custom base id (1/2) so it never picks up a
-// swapped template
-#define DEFAULT_SKIN 0
-
-// ls international airport (terminal apron, on the ground, facing the doors)
 #define SPAWN_X 1685.9645
 #define SPAWN_Y -2329.8933
 #define SPAWN_Z 13.5469
 #define SPAWN_A 180.0
 
+#define OBJECT_X (SPAWN_X + 8.0)
+#define OBJECT_Y (SPAWN_Y - 3.0)
+#define OBJECT_Z SPAWN_Z
+#define OBJECT_STEP 1.0
+
+#define DIALOG_MAIN 1000
+#define DIALOG_OBJECT 1001
+#define DIALOG_INFO 1002
+
+new gObject = INVALID_OBJECT_ID;
+
+stock CreateTestObject()
+{
+    if (gObject != INVALID_OBJECT_ID)
+    {
+        DestroyObject(gObject);
+        gObject = INVALID_OBJECT_ID;
+    }
+
+    gObject = CreateObject(MODEL_OBJECT, OBJECT_X, OBJECT_Y, OBJECT_Z, 0.0, 0.0, 0.0);
+    return gObject;
+}
+
+stock ObjectExists()
+{
+    return gObject != INVALID_OBJECT_ID;
+}
+
+stock ShowMainDialog(playerid)
+{
+    ShowPlayerDialog(playerid, DIALOG_MAIN, DIALOG_STYLE_LIST,
+        "CustomSkin R3-1 Test",
+        "Skin 1 - Model 20001\nSkin 2 - Model 20002\nNormal CJ - Model 0\nObject Control - Model -2000",
+        "Select", "Close");
+    return 1;
+}
+
+stock ShowObjectDialog(playerid)
+{
+    ShowPlayerDialog(playerid, DIALOG_OBJECT, DIALOG_STYLE_LIST,
+        "Object Control",
+        "Create object\nMove object to player\nMove up\nMove down\nMove forward\nMove back\nMove left\nMove right\nShow position\nReset position\nRemove object",
+        "Select", "Back");
+    return 1;
+}
+
+stock ShowObjectPosition(playerid)
+{
+    new Float:x, Float:y, Float:z;
+    new message[144];
+
+    if (!ObjectExists())
+    {
+        ShowPlayerDialog(playerid, DIALOG_INFO, DIALOG_STYLE_MSGBOX,
+            "Object Info",
+            "Object does not exist.\nCreate it first from Object Control.",
+            "OK", "");
+        return 1;
+    }
+
+    GetObjectPos(gObject, x, y, z);
+    format(message, sizeof(message), "Object ID: %d\nModel: %d\nBase model: 19379\nX: %.3f\nY: %.3f\nZ: %.3f", gObject, MODEL_OBJECT, x, y, z);
+    ShowPlayerDialog(playerid, DIALOG_INFO, DIALOG_STYLE_MSGBOX,
+        "Object Position",
+        message,
+        "OK", "");
+    return 1;
+}
+
+stock ObjectNotFound(playerid)
+{
+    ShowPlayerDialog(playerid, DIALOG_INFO, DIALOG_STYLE_MSGBOX,
+        "Object Control",
+        "Object does not exist.\nUse Create object first.",
+        "OK", "");
+    return 1;
+}
+
+stock MoveObjectVertical(playerid, up)
+{
+    new Float:x, Float:y, Float:z;
+
+    if (!ObjectExists())
+        return ObjectNotFound(playerid);
+
+    GetObjectPos(gObject, x, y, z);
+    if (up)
+        z += OBJECT_STEP;
+    else
+        z -= OBJECT_STEP;
+
+    SetObjectPos(gObject, x, y, z);
+    return ShowObjectPosition(playerid);
+}
+
+stock MoveObjectForward(playerid, isForward)
+{
+    new Float:x, Float:y, Float:z;
+    new Float:angle;
+
+    if (!ObjectExists())
+        return ObjectNotFound(playerid);
+
+    GetObjectPos(gObject, x, y, z);
+    GetPlayerFacingAngle(playerid, angle);
+
+    if (isForward)
+    {
+        x += floatsin(-angle, degrees) * OBJECT_STEP;
+        y += floatcos(-angle, degrees) * OBJECT_STEP;
+    }
+    else
+    {
+        x -= floatsin(-angle, degrees) * OBJECT_STEP;
+        y -= floatcos(-angle, degrees) * OBJECT_STEP;
+    }
+
+    SetObjectPos(gObject, x, y, z);
+    return ShowObjectPosition(playerid);
+}
+
+stock MoveObjectSide(playerid, left)
+{
+    new Float:x, Float:y, Float:z;
+
+    if (!ObjectExists())
+        return ObjectNotFound(playerid);
+
+    GetObjectPos(gObject, x, y, z);
+    if (left)
+        x -= OBJECT_STEP;
+    else
+        x += OBJECT_STEP;
+
+    SetObjectPos(gObject, x, y, z);
+    return ShowObjectPosition(playerid);
+}
+
 public OnGameModeInit()
 {
-    print("[test][boot] OnGameModeInit: begin customskin R3-1 diagnostic harness");
-    printf("[test][config] skinA=%d baseA=%d skinB=%d baseB=%d default=%d spawn=(%.4f, %.4f, %.4f, %.2f)",
-        SKIN_A_ID, SKIN_A_BASE, SKIN_B_ID, SKIN_B_BASE, DEFAULT_SKIN,
-        SPAWN_X, SPAWN_Y, SPAWN_Z, SPAWN_A);
-    SetGameModeText("customskin-037 test");
+    SetGameModeText("CustomSkin R3-1");
 
-    // register both custom skins. open.mp sends rpc 179 (ModelRequest) to dl clients
-    printf("[test][models] AddCharModel request custom=%d base=%d dff=people001.dff txd=people001.txd", SKIN_A_ID, SKIN_A_BASE);
-    if (AddCharModel(SKIN_A_BASE, SKIN_A_ID, "people001.dff", "people001.txd"))
-        print("[test][models] AddCharModel custom=20001 base=1 REAL people001 OK");
-    else
-        print("[test][models][ERROR] AddCharModel custom=20001 base=1 FAILED - check models/people001.dff + people001.txd");
+    print("========================================");
+    print(" CustomSkin R3-1 Test");
+    print(" Models loaded from models/artconfig.txt");
+    print("========================================");
 
-    printf("[test][models] AddCharModel request custom=%d base=%d dff=people002.dff txd=people002.txd", SKIN_B_ID, SKIN_B_BASE);
-    if (AddCharModel(SKIN_B_BASE, SKIN_B_ID, "people002.dff", "people002.txd"))
-        print("[test][models] AddCharModel custom=20002 base=2 REAL people002 OK");
-    else
-        print("[test][models][ERROR] AddCharModel custom=20002 base=2 FAILED - check models/people002.dff + people002.txd");
+    AddPlayerClass(0, SPAWN_X, SPAWN_Y, SPAWN_Z, SPAWN_A, WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
+    AddPlayerClass(MODEL_SKIN_1, SPAWN_X, SPAWN_Y, SPAWN_Z, SPAWN_A, WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
+    AddPlayerClass(MODEL_SKIN_2, SPAWN_X, SPAWN_Y, SPAWN_Z, SPAWN_A, WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
 
-    // Keep the normal SA-MP class-selection screen active. Do not auto-call SpawnPlayer
-    // from OnPlayerConnect, otherwise the client skips the << / >> class-selection UI.
-    AddPlayerClass(DEFAULT_SKIN, SPAWN_X, SPAWN_Y, SPAWN_Z, SPAWN_A,
-        WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
-    AddPlayerClass(SKIN_A_ID, SPAWN_X, SPAWN_Y, SPAWN_Z, SPAWN_A,
-        WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
-    AddPlayerClass(SKIN_B_ID, SPAWN_X, SPAWN_Y, SPAWN_Z, SPAWN_A,
-        WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
-    printf("[test][class] AddPlayerClass slots=0:%d, 1:%d, 2:%d spawn=(%.4f, %.4f, %.4f) angle=%.2f",
-        DEFAULT_SKIN, SKIN_A_ID, SKIN_B_ID, SPAWN_X, SPAWN_Y, SPAWN_Z, SPAWN_A);
-    print("[test][boot] OnGameModeInit: complete");
+    CreateTestObject();
+
+    printf("[Object] model %d base 19379 id %d at %.3f %.3f %.3f", MODEL_OBJECT, gObject, OBJECT_X, OBJECT_Y, OBJECT_Z);
     return 1;
 }
 
 public OnPlayerConnect(playerid)
 {
-    new playerName[MAX_PLAYER_NAME + 1];
-    GetPlayerName(playerid, playerName, sizeof(playerName));
-    printf("[test][connect] OnPlayerConnect player=%d name=%s", playerid, playerName);
-    SendClientMessage(playerid, 0xFFFFFFFF,
-        "customskin-037 R3-1 test: real people001/people002 skins 20001/20002");
-    print("[test][connect] leaving player in normal class-selection flow; no SpawnPlayer() here");
-    return 1;
-}
-
-public OnPlayerRequestClass(playerid, classid)
-{
-    printf("[test][class] OnPlayerRequestClass player=%d class=%d current_skin=%d", playerid, classid, GetPlayerSkin(playerid));
-    SetPlayerPos(playerid, SPAWN_X, SPAWN_Y, SPAWN_Z);
-    SetPlayerFacingAngle(playerid, SPAWN_A);
-    // camera in front of the player (facing angle 180 = looking toward -Y) for a preview
-    SetPlayerCameraPos(playerid, SPAWN_X, SPAWN_Y - 3.0, SPAWN_Z + 0.7);
-    SetPlayerCameraLookAt(playerid, SPAWN_X, SPAWN_Y, SPAWN_Z);
-    return 1;
-}
-
-public OnPlayerCommandText(playerid, cmdtext[])
-{
-    new playerName[MAX_PLAYER_NAME + 1];
-    GetPlayerName(playerid, playerName, sizeof(playerName));
-    printf("[test][command] received player=%d name=%s command=%s current_skin=%d",
-        playerid, playerName, cmdtext, GetPlayerSkin(playerid));
-    // Test either real custom skin on demand. The bases differ (1 vs 2), so the per-base swap
-    // renders each registered model.
-    if (strcmp(cmdtext, "/skin1", true) == 0 || strcmp(cmdtext, "/a", true) == 0)
-    {
-        printf("[test][skin][before] cmd=%s player=%d skin=%d target_custom=%d target_base=%d",
-            cmdtext, playerid, GetPlayerSkin(playerid), SKIN_A_ID, SKIN_A_BASE);
-        SetPlayerSkin(playerid, SKIN_A_ID);
-        printf("[test][skin][after] cmd=%s player=%d reported_skin=%d requested_custom=%d base=%d",
-            cmdtext, playerid, GetPlayerSkin(playerid), SKIN_A_ID, SKIN_A_BASE);
-        SendClientMessage(playerid, 0xFFFFFFFF, "switched to custom skin 20001 (base 1)");
-        return 1;
-    }
-    if (strcmp(cmdtext, "/skin2", true) == 0 || strcmp(cmdtext, "/b", true) == 0)
-    {
-        printf("[test][skin][before] cmd=%s player=%d skin=%d target_custom=%d target_base=%d",
-            cmdtext, playerid, GetPlayerSkin(playerid), SKIN_B_ID, SKIN_B_BASE);
-        SetPlayerSkin(playerid, SKIN_B_ID);
-        printf("[test][skin][after] cmd=%s player=%d reported_skin=%d requested_custom=%d base=%d",
-            cmdtext, playerid, GetPlayerSkin(playerid), SKIN_B_ID, SKIN_B_BASE);
-        SendClientMessage(playerid, 0xFFFFFFFF, "switched to custom skin 20002 (base 2)");
-        return 1;
-    }
-    if (strcmp(cmdtext, "/normal", true) == 0)
-    {
-        printf("[test][skin][before] cmd=/normal player=%d skin=%d target_default=%d",
-            playerid, GetPlayerSkin(playerid), DEFAULT_SKIN);
-        SetPlayerSkin(playerid, DEFAULT_SKIN);
-        printf("[test][skin][after] cmd=/normal player=%d reported_skin=%d target_default=%d",
-            playerid, GetPlayerSkin(playerid), DEFAULT_SKIN);
-        SendClientMessage(playerid, 0xFFFFFFFF, "back to the normal skin");
-        return 1;
-    }
-    printf("[test][command][unhandled] player=%d command=%s", playerid, cmdtext);
-    return 0;
-}
-
-// open.mp artwork callbacks - handy server-side visibility during testing
-public OnPlayerRequestDownload(playerid, DOWNLOAD_REQUEST:type, crc)
-{
-    new playerName[MAX_PLAYER_NAME + 1];
-    GetPlayerName(playerid, playerName, sizeof(playerName));
-    printf("[test][download][request] player=%d name=%s type=%d crc=0x%08x",
-        playerid, playerName, _:type, crc);
-    return 1; // allow the default webserver download
-}
-
-public OnPlayerFinishedDownloading(playerid, virtualworld)
-{
-    new playerName[MAX_PLAYER_NAME + 1];
-    GetPlayerName(playerid, playerName, sizeof(playerName));
-    printf("[test][download][finished] player=%d name=%s virtualworld=%d current_skin=%d",
-        playerid, playerName, virtualworld, GetPlayerSkin(playerid));
+    SendClientMessage(playerid, 0xFFFFFFFF, "CustomSkin R3-1 test loaded.");
+    SendClientMessage(playerid, 0xFFFFFFFF, "Use /test to open the interactive test menu.");
     return 1;
 }
 
 public OnPlayerSpawn(playerid)
 {
-    new playerName[MAX_PLAYER_NAME + 1];
-    GetPlayerName(playerid, playerName, sizeof(playerName));
-    printf("[test][spawn][begin] player=%d name=%s selected_skin=%d", playerid, playerName, GetPlayerSkin(playerid));
-
-    // The selected AddPlayerClass skin is authoritative here. Do NOT overwrite it with
-    // SKIN_A_ID, otherwise the << / >> class selection would be immediately discarded.
     SetPlayerPos(playerid, SPAWN_X, SPAWN_Y, SPAWN_Z);
     SetPlayerFacingAngle(playerid, SPAWN_A);
-
-    // OnPlayerRequestClass uses a preview camera. Explicitly restore normal gameplay camera
-    // and control after spawning so the player can look around and walk immediately.
-    SetCameraBehindPlayer(playerid);
-    TogglePlayerControllable(playerid, true);
-
-    SendClientMessage(playerid, 0xFFFFFFFF,
-        "spawned - use << / >> before spawn to choose normal / custom 20001 / custom 20002");
-    printf("[test][spawn][complete] player=%d selected_skin=%d pos=(%.4f, %.4f, %.4f) angle=%.2f camera=behind_player controllable=1",
-        playerid, GetPlayerSkin(playerid), SPAWN_X, SPAWN_Y, SPAWN_Z, SPAWN_A);
+    ShowMainDialog(playerid);
     return 1;
+}
+
+public OnPlayerCommandText(playerid, cmdtext[])
+{
+    if (!strcmp(cmdtext, "/test", true))
+    {
+        ShowMainDialog(playerid);
+        return 1;
+    }
+
+    return 0;
+}
+
+public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
+{
+    if (dialogid == DIALOG_MAIN)
+    {
+        if (!response)
+            return 1;
+
+        switch (listitem)
+        {
+            case 0:
+            {
+                SetPlayerSkin(playerid, MODEL_SKIN_1);
+                ShowPlayerDialog(playerid, DIALOG_INFO, DIALOG_STYLE_MSGBOX,
+                    "Skin Test", "Applied custom skin model 20001.", "OK", "");
+            }
+            case 1:
+            {
+                SetPlayerSkin(playerid, MODEL_SKIN_2);
+                ShowPlayerDialog(playerid, DIALOG_INFO, DIALOG_STYLE_MSGBOX,
+                    "Skin Test", "Applied custom skin model 20002.", "OK", "");
+            }
+            case 2:
+            {
+                SetPlayerSkin(playerid, 0);
+                ShowPlayerDialog(playerid, DIALOG_INFO, DIALOG_STYLE_MSGBOX,
+                    "Skin Test", "Restored normal CJ model 0.", "OK", "");
+            }
+            case 3:
+            {
+                ShowObjectDialog(playerid);
+            }
+        }
+        return 1;
+    }
+
+    if (dialogid == DIALOG_OBJECT)
+    {
+        if (!response)
+        {
+            ShowMainDialog(playerid);
+            return 1;
+        }
+
+        switch (listitem)
+        {
+            case 0:
+            {
+                CreateTestObject();
+                ShowObjectPosition(playerid);
+            }
+            case 1:
+            {
+                new Float:x, Float:y, Float:z;
+
+                if (!ObjectExists())
+                    return ObjectNotFound(playerid);
+
+                GetPlayerPos(playerid, x, y, z);
+                SetObjectPos(gObject, x, y, z);
+                ShowObjectPosition(playerid);
+            }
+            case 2:
+            {
+                MoveObjectVertical(playerid, true);
+            }
+            case 3:
+            {
+                MoveObjectVertical(playerid, false);
+            }
+            case 4:
+            {
+                MoveObjectForward(playerid, true);
+            }
+            case 5:
+            {
+                MoveObjectForward(playerid, false);
+            }
+            case 6:
+            {
+                MoveObjectSide(playerid, true);
+            }
+            case 7:
+            {
+                MoveObjectSide(playerid, false);
+            }
+            case 8:
+            {
+                ShowObjectPosition(playerid);
+            }
+            case 9:
+            {
+                if (!ObjectExists())
+                    return ObjectNotFound(playerid);
+
+                SetObjectPos(gObject, OBJECT_X, OBJECT_Y, OBJECT_Z);
+                SetObjectRot(gObject, 0.0, 0.0, 0.0);
+                ShowObjectPosition(playerid);
+            }
+            case 10:
+            {
+                if (!ObjectExists())
+                    return ObjectNotFound(playerid);
+
+                DestroyObject(gObject);
+                gObject = INVALID_OBJECT_ID;
+                ShowPlayerDialog(playerid, DIALOG_INFO, DIALOG_STYLE_MSGBOX,
+                    "Object Control", "Object removed.", "OK", "");
+            }
+        }
+        return 1;
+    }
+
+    if (dialogid == DIALOG_INFO)
+    {
+        if (!response)
+            return 1;
+
+        ShowMainDialog(playerid);
+        return 1;
+    }
+
+    return 0;
 }

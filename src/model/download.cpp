@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "model/crc32.h"
+#include "model/securecache.h"
 
 #include <windows.h>
 #include <wininet.h>
@@ -15,7 +16,7 @@
 
 namespace dl {
 
-bool Fetch(const std::string& url, const std::string& destPath) {
+bool FetchBytes(const std::string& url, std::vector<unsigned char>& out) {
     // open.mp's webserver rejects anything whose user-agent isn't exactly "samp/0.3"
     HINTERNET hNet = InternetOpenA("SAMP/0.3", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
     if (!hNet) {
@@ -31,28 +32,16 @@ bool Fetch(const std::string& url, const std::string& destPath) {
         return false;
     }
 
-    FILE* f = std::fopen(destPath.c_str(), "wb");
-    if (!f) {
-        CS_LOGE("dl: cannot open %s for writing", destPath.c_str());
-        InternetCloseHandle(hUrl);
-        InternetCloseHandle(hNet);
-        return false;
-    }
-
-    char buf[65536];
+    out.clear();
+    unsigned char buf[65536];
     DWORD read = 0;
-    size_t total = 0;
-    while (InternetReadFile(hUrl, buf, sizeof(buf), &read) && read > 0) {
-        std::fwrite(buf, 1, read, f);
-        total += read;
-    }
+    while (InternetReadFile(hUrl, buf, sizeof(buf), &read) && read > 0)
+        out.insert(out.end(), buf, buf + read);
 
-    std::fclose(f);
     InternetCloseHandle(hUrl);
     InternetCloseHandle(hNet);
-
-    CS_LOGI("dl: %s -> %s (%zu bytes)", url.c_str(), destPath.c_str(), total);
-    return total > 0;
+    CS_LOGI("dl: %s -> memory (%zu bytes)", url.c_str(), out.size());
+    return !out.empty();
 }
 
 namespace {
@@ -64,11 +53,12 @@ struct Job {
     bool isDff = false;
 };
 
-std::mutex g_mtx;                 // guards g_jobs and g_done
+std::mutex g_mtx;                 // guards g_jobs, g_done, g_pending, g_hook
 std::condition_variable g_cv;
 std::deque<Job> g_jobs;           // pending downloads (worker consumes)
 std::vector<Result> g_done;       // finished downloads (main thread drains)
 std::unordered_set<uint64_t> g_pending; // (crc << 1) | isDff, covers queued + in-flight jobs
+CompletionHook g_hook = nullptr;  // optional native-client completion callback
 std::once_flag g_workerOnce;
 
 // single detached worker: fetches queued files serially and crc-checks each. it only touches the
@@ -85,15 +75,23 @@ void WorkerLoop() {
         Result r;
         r.crc = job.crc;
         r.isDff = job.isDff;
-        if (Fetch(job.url, job.dest))
-            r.ok = (crc::File(job.dest.c_str()) == job.crc);
+        std::vector<unsigned char> bytes;
+        if (FetchBytes(job.url, bytes) && crc::Buffer(bytes.data(), bytes.size()) == job.crc) {
+            r.bytes = static_cast<uint32_t>(bytes.size());
+            r.ok = securecache::Store(job.crc, job.isDff, bytes);
+            if (r.ok)
+                CS_LOGI("dl: encrypted asset committed 0x%08X %s; plaintext never written to disk",
+                        job.crc, job.isDff ? "DFF" : "TXD");
+        }
+        if (!bytes.empty()) SecureZeroMemory(bytes.data(), bytes.size());
+        CompletionHook hook = nullptr;
         {
             std::lock_guard<std::mutex> lk(g_mtx);
-            // Keep the key pending until the main thread commits the .part file
-            // to its final cache path. Clearing here races directdl::Pump() and
-            // allows duplicate RPC 183 responses to enqueue the same transfer.
+            g_pending.erase((static_cast<uint64_t>(job.crc) << 1) | (job.isDff ? 1u : 0u));
             g_done.push_back(r);
+            hook = g_hook;
         }
+        if (hook) hook(r);
     }
 }
 
@@ -111,6 +109,11 @@ void Enqueue(const std::string& url, const std::string& destPath, uint32_t crc, 
         g_jobs.push_back(Job{ url, destPath, crc, isDff });
     }
     g_cv.notify_one();
+}
+
+void SetCompletionHook(CompletionHook hook) {
+    std::lock_guard<std::mutex> lk(g_mtx);
+    g_hook = hook;
 }
 
 void Release(uint32_t crc, bool isDff) {

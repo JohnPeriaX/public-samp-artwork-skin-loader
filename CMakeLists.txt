@@ -33,7 +33,7 @@ target_include_directories(custommodels PRIVATE
 target_compile_definitions(custommodels PRIVATE
     WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 
-target_link_libraries(custommodels PRIVATE wininet shell32)
+target_link_libraries(custommodels PRIVATE wininet shell32 bcrypt crypt32)
 
 # Static CRT: no runtime DLL dependency inside the game process.
 set_property(TARGET custommodels PROPERTY

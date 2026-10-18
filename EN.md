@@ -44,6 +44,8 @@ This is kept separate from packet parsing. If a connection identity problem occu
 
 The model manifest becomes a local table containing:
 
+For the current R3 extension, the two model classes are handled by the native R3 0.3.DL manager. Custom skins use `type=1`; simple objects use the native object class and custom IDs from `-1000` through `-30000`. IDA confirms that R3's dormant manager already routes negative IDs through `CObjectPool::Create`, so the plugin now supplies the native cache and activates those handlers instead of indexing GTA's `CModelInfo` table with a negative ID. The object path is still not a runtime PASS until a live custom-object test succeeds.
+
 - custom model ID
 - base model ID
 - DFF CRC
@@ -72,6 +74,8 @@ For each ready custom model, it finds the GTA model-info slot for the base skin 
 When the model is no longer needed, the original clump is restored. If GTA's streamer has already unloaded the custom clump, the renderer drops the stale pointer instead of writing it back into a newly loaded model.
 
 The renderer also hooks the R3-1 spawn path so a custom model ID can be translated to the correct base model ID before SA-MP constructs the ped.
+
+The current R3 extension now uses the stock R3 0.3.DL object pipeline. The plugin downloads verified DFF/TXD files into the native manager's cache, forwards RPC 179/183/185 to the validated R3 handlers, and mirrors type-2 object entries for diagnostics and cache-backed metadata. GTA `CModelInfo::AddClumpModel` is not used for negative SA-MP object IDs. It remains **in progress** until a live `AddSimpleModel` + `CreateObject` test succeeds.
 
 ## R5-1 implementation
 
@@ -138,6 +142,19 @@ R3-1 has real visual evidence from the local artwork test harness:
 The client logs also showed R3-1 detection, the artwork RPC bridge, RenderWare loading for both custom models, and the expected skin transitions.
 
 R5-1 has source/build preservation but is not called a runtime PASS in this documentation. That distinction is intentional.
+
+## Latest PC Release build verification
+
+The current source tree was rebuilt successfully with Visual Studio 2022 Community MSBuild:
+
+- Configuration: `Release | Win32`
+- MSBuild: `17.14.60`
+- MSVC: `14.44.35207`
+- Result: **0 warnings, 0 errors**
+- Output: `build/bin/Release/custommodels.asi`
+- SHA-256: `A65E526E58DED5432D9B4CFCDF37C559CF457A925329C6E4C2C59108885041D0`
+
+This confirms the current source/build path only. It does **not** promote the R3 custom-object work to runtime PASS and does not claim R5 runtime PASS.
 
 ## Credits
 

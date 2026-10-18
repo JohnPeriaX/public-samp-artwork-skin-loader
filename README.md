@@ -19,6 +19,25 @@ This repository is deliberately revision-specific. It does not try to turn every
 
 The R3-1 path has been visually tested with custom skins `20001` and `20002`, followed by a return to normal CJ. R5-1 remains intentionally conservative in the documentation: the source path is present and builds, but this README does not turn source/build evidence into a runtime PASS.
 
+### Latest PC Release build verification
+
+The current source tree has been rebuilt successfully with the installed Visual Studio 2022 Community MSBuild toolchain:
+
+- Configuration: `Release | Win32`
+- MSBuild: `17.14.60`
+- MSVC: `14.44.35207`
+- Result: **0 warnings, 0 errors**
+- Output: `build/bin/Release/custommodels.asi`
+- SHA-256: `A65E526E58DED5432D9B4CFCDF37C559CF457A925329C6E4C2C59108885041D0`
+
+This is a **build verification only**. It does not promote the R3 custom-object work to runtime PASS, and it does not claim R5 runtime PASS.
+
+### R3-1 custom-object work in progress
+
+R3-1 is now being extended beyond custom skins to the 0.3.DL **simple-object** path. SA-MP's `AddSimpleModel` uses custom object IDs in the `-1000` to `-30000` range and later consumes them through `CreateObject` / `CreatePlayerObject`. IDA validation shows that the target R3 client already contains the dormant 0.3.DL model manager and native `CObjectPool::Create` path for negative model IDs. The current source work activates that native object pipeline and supplies its cache, while keeping the existing `20000`-`30000` skin path intact.
+
+This is **implementation work, not a runtime PASS yet**. The R3 object path still needs the target-client IDA validation and a live custom-object specimen before it can be marked complete.
+
 ## How the two paths work
 
 ### R3-1: direct artwork bridge
@@ -150,6 +169,8 @@ The plugin does not replace every ped model globally. It remembers the original 
 The R3-1 spawn hooks also translate a custom model ID back to its base model ID before SA-MP builds the player object. The custom clump is already prepared, so the resulting ped uses the expected base slot while displaying the custom artwork.
 
 The per-frame hook reconciles the artwork state and catches cases where GTA's streamer unloads a model. That prevents a one-time swap from becoming a stale pointer after the game reloads the model.
+
+For the current R3 object work, the RenderWare loader now supplies the native R3 artwork cache, while the stock R3 0.3.DL model manager and `CObjectPool::Create` own negative-ID registration/rendering. Direct IDA evidence shows `CModelInfo::AddClumpModel` is a GTA model-info allocator and must not be used with `-1000..-30000` SA-MP object IDs. The object path remains **in progress** until a live `AddSimpleModel` + `CreateObject` test succeeds.
 
 ### `src/net/raknet.cpp` and `src/net/artwork.cpp`
 

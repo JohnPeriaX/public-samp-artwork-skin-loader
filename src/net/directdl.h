@@ -19,11 +19,15 @@ struct ManagerSkin {
 };
 
 using SkinVisitor = void (*)(const ManagerSkin&, void* ctx);
+using ObjectVisitor = void (*)(const ManagerSkin&, void* ctx);
 
 bool Init();
 void Pump();
 int ForEachSkin(SkinVisitor visit, void* ctx);
+int ForEachObject(ObjectVisitor visit, void* ctx);
 bool CachePath(uint32_t crc, bool isDff, char* out, unsigned n);
+bool EnsurePlaintext(uint32_t crc, bool isDff);
+void ReleasePlaintext(uint32_t crc, bool isDff);
 const void* ManagerToken();
 
 // Direct 0.3DL player-model bridge used by the R3-1 skin path.
